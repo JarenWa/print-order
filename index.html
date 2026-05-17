@@ -26,45 +26,6 @@
     h1 { font-size: 22px; font-weight: 600; }
     .count { font-size: 14px; color: #666; }
 
-    .config-box {
-      background: #fff;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    }
-    .config-box label {
-      display: block;
-      font-size: 14px;
-      color: #666;
-      margin-bottom: 8px;
-    }
-    .config-box input {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 14px;
-      outline: none;
-    }
-    .config-box input:focus { border-color: #1890ff; }
-    .config-box .tips {
-      font-size: 12px;
-      color: #999;
-      margin-top: 8px;
-    }
-    .config-box button {
-      margin-top: 10px;
-      padding: 8px 20px;
-      background: #1890ff;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    .config-box button:hover { background: #40a9ff; }
-
     .order-card {
       background: #fff;
       border-radius: 8px;
@@ -130,16 +91,6 @@
       <span class="count" id="totalCount">共 0 条</span>
     </header>
 
-    <div class="config-box" id="configBox">
-      <label>云函数地址（URL 化地址）</label>
-      <input type="text" id="apiUrl" placeholder="https://fc-mp-9e7a79aa-2383-4c00-ad3b-9d4db4a25765.next.bspapp.com/getPrintOrder">
-      <div class="tips">
-        提示：在 HBuilderX 中右键 getPrintOrders 云函数 → 云函数 URL 化，将地址粘贴到上方。
-        地址仅保存在浏览器本地，刷新后需重新输入。
-      </div>
-      <button onclick="saveAndLoad()">保存并加载</button>
-    </div>
-
     <div id="orderList"></div>
     <div id="loadMoreContainer"></div>
     <div class="loading" id="loading" style="display:none;">加载中...</div>
@@ -148,11 +99,7 @@
   </div>
 
   <script>
-    // ==========================================
-    // 配置：默认从 localStorage 读取，也可手动修改下方变量
-    // ==========================================
-    const STORAGE_KEY = 'order_print_api_url';
-    let API_URL = localStorage.getItem(STORAGE_KEY) || '';
+    const API_URL = 'https://fc-mp-9e7a79aa-2383-4c00-ad3b-9d4db4a25765.next.bspapp.com/getPrintOrder';
 
     let page = 1;
     const pageSize = 20;
@@ -193,10 +140,10 @@
             <span class="label">创建时间</span>
             <span class="value">${formatDate(item.create_date)}</span>
           </div>
-		  <div class="row">
-		    <span class="label">区域</span>
-		    <span class="value">${addr.street_name || '-'}</span>
-		  </div>
+          <div class="row">
+            <span class="label">区域</span>
+            <span class="value">${addr.street_name || '-'}</span>
+          </div>
           <div class="row">
             <span class="label">客户姓名</span>
             <span class="value">${addr.user_name || '-'}</span>
@@ -213,11 +160,6 @@
 
     async function loadData(append = false) {
       if (loading) return;
-      if (!API_URL) {
-        $('configBox').style.display = 'block';
-        return;
-      }
-      $('configBox').style.display = 'none';
 
       loading = true;
       $('loading').style.display = append ? 'none' : 'block';
@@ -258,36 +200,14 @@
         }
       } catch (err) {
         console.error(err);
-        alert('请求失败，请检查云函数地址是否正确且已开启 URL 化');
+        alert('请求失败，请检查网络或云函数地址');
       } finally {
         loading = false;
         $('loading').style.display = 'none';
       }
     }
 
-    function saveAndLoad() {
-      const url = $('apiUrl').value.trim();
-      if (!url) {
-        alert('请输入云函数地址');
-        return;
-      }
-      API_URL = url;
-      localStorage.setItem(STORAGE_KEY, url);
-      page = 1;
-      hasMore = true;
-      $('orderList').innerHTML = '';
-      $('noMore').style.display = 'none';
-      $('empty').style.display = 'none';
-      loadData();
-    }
-
-    // 初始化
-    window.onload = () => {
-      if (API_URL) {
-        $('apiUrl').value = API_URL;
-        loadData();
-      }
-    };
+    window.onload = () => loadData();
   </script>
 </body>
 </html>
