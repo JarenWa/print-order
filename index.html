@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>出单列表</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    h1 { font-size: 22px; font-weight: 600; }
+    .count { font-size: 14px; color: #666; }
+
+    .config-box {
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .config-box label {
+      display: block;
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    .config-box input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+    }
+    .config-box input:focus { border-color: #1890ff; }
+    .config-box .tips {
+      font-size: 12px;
+      color: #999;
+      margin-top: 8px;
+    }
+    .config-box button {
+      margin-top: 10px;
+      padding: 8px 20px;
+      background: #1890ff;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .config-box button:hover { background: #40a9ff; }
+
+    .order-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .row {
+      display: flex;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .row:last-child { margin-bottom: 0; }
+    .label {
+      width: 80px;
+      color: #999;
+      flex-shrink: 0;
+    }
+    .value { flex: 1; color: #333; word-break: break-all; }
+    .tag {
+      display: inline-block;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+    .tag.pre { background: #e6f7ff; color: #1890ff; }
+    .tag.normal { background: #f6ffed; color: #52c41a; }
+    .link {
+      color: #1890ff;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .loading, .empty, .no-more {
+      text-align: center;
+      padding: 30px 0;
+      font-size: 14px;
+      color: #999;
+    }
+
+    .load-more-btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      text-align: center;
+      background: #fff;
+      border: none;
+      border-radius: 8px;
+      color: #1890ff;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .load-more-btn:hover { background: #f0f9ff; }
+    .load-more-btn:disabled { color: #999; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>出单列表</h1>
+      <span class="count" id="totalCount">共 0 条</span>
+    </header>
+
+    <div class="config-box" id="configBox">
+      <label>云函数地址（URL 化地址）</label>
+      <input type="text" id="apiUrl" placeholder="https://fc-mp-9e7a79aa-2383-4c00-ad3b-9d4db4a25765.next.bspapp.com/getPrintOrder">
+      <div class="tips">
+        提示：在 HBuilderX 中右键 getPrintOrders 云函数 → 云函数 URL 化，将地址粘贴到上方。
+        地址仅保存在浏览器本地，刷新后需重新输入。
+      </div>
+      <button onclick="saveAndLoad()">保存并加载</button>
+    </div>
+
+    <div id="orderList"></div>
+    <div id="loadMoreContainer"></div>
+    <div class="loading" id="loading" style="display:none;">加载中...</div>
+    <div class="empty" id="empty" style="display:none;">暂无出单记录</div>
+    <div class="no-more" id="noMore" style="display:none;">没有更多了</div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 配置：默认从 localStorage 读取，也可手动修改下方变量
+    // ==========================================
+    const STORAGE_KEY = 'order_print_api_url';
+    let API_URL = localStorage.getItem(STORAGE_KEY) || '';
+
+    let page = 1;
+    const pageSize = 20;
+    let total = 0;
+    let loading = false;
+    let hasMore = true;
+
+    const $ = id => document.getElementById(id);
+
+    function formatDate(ts) {
+      if (!ts) return '-';
+      const d = new Date(ts);
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function renderList(data, append) {
+      const listEl = $('orderList');
+      if (!append) listEl.innerHTML = '';
+
+      data.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'order-card';
+        const tagClass = item.is_pre_order ? 'pre' : 'normal';
+        const tagText = item.is_pre_order ? '预售' : '现货';
+        const addr = item.user_address || {};
+        const pdfHtml = item.pdf_file_url
+          ? `<div class="row"><span class="label">打印文件</span><span class="value"><a class="link" href="${item.pdf_file_url}" target="_blank">点击下载/查看</a></span></div>`
+          : '';
+
+        card.innerHTML = `
+          <div class="row">
+            <span class="label">订单号</span>
+            <span class="value">${item.order_no || '-'}</span>
+            <span class="tag ${tagClass}">${tagText}</span>
+          </div>
+          <div class="row">
+            <span class="label">创建时间</span>
+            <span class="value">${formatDate(item.create_date)}</span>
+          </div>
+		  <div class="row">
+		    <span class="label">区域</span>
+		    <span class="value">${addr.street_name || '-'}</span>
+		  </div>
+          <div class="row">
+            <span class="label">客户姓名</span>
+            <span class="value">${addr.user_name || '-'}</span>
+          </div>
+          <div class="row">
+            <span class="label">联系电话</span>
+            <span class="value">${addr.mobile || '-'}</span>
+          </div>
+          ${pdfHtml}
+        `;
+        listEl.appendChild(card);
+      });
+    }
+
+    async function loadData(append = false) {
+      if (loading) return;
+      if (!API_URL) {
+        $('configBox').style.display = 'block';
+        return;
+      }
+      $('configBox').style.display = 'none';
+
+      loading = true;
+      $('loading').style.display = append ? 'none' : 'block';
+      $('loadMoreContainer').innerHTML = '';
+
+      try {
+        const resp = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ page, pageSize })
+        });
+        const result = await resp.json();
+
+        if (result.code !== 0) {
+          alert('加载失败：' + (result.message || '未知错误'));
+          return;
+        }
+        const data = result.data || [];
+        total = result.total !== undefined ? result.total : data.length;
+        $('totalCount').textContent = `共 ${total} 条`;
+
+        if (data.length === 0 && !append) {
+          $('empty').style.display = 'block';
+          $('noMore').style.display = 'none';
+        } else {
+          $('empty').style.display = 'none';
+          renderList(data, append);
+          hasMore = data.length === pageSize;
+          if (hasMore) {
+            const btn = document.createElement('button');
+            btn.className = 'load-more-btn';
+            btn.textContent = '加载更多';
+            btn.onclick = () => { page++; loadData(true); };
+            $('loadMoreContainer').appendChild(btn);
+          } else {
+            $('noMore').style.display = 'block';
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        alert('请求失败，请检查云函数地址是否正确且已开启 URL 化');
+      } finally {
+        loading = false;
+        $('loading').style.display = 'none';
+      }
+    }
+
+    function saveAndLoad() {
+      const url = $('apiUrl').value.trim();
+      if (!url) {
+        alert('请输入云函数地址');
+        return;
+      }
+      API_URL = url;
+      localStorage.setItem(STORAGE_KEY, url);
+      page = 1;
+      hasMore = true;
+      $('orderList').innerHTML = '';
+      $('noMore').style.display = 'none';
+      $('empty').style.display = 'none';
+      loadData();
+    }
+
+    // 初始化
+    window.onload = () => {
+      if (API_URL) {
+        $('apiUrl').value = API_URL;
+        loadData();
+      }
+    };
+  </script>
+</body>
+</html>
